@@ -70,24 +70,27 @@ fn conv_1d_block_boundary[
     global_i = block_dim.x * block_idx.x + thread_idx.x
     local_i = thread_idx.x
     shared_a = tb[dtype]().row_major[TPB + CONV_2 - 1]().shared().alloc()
-    shared_b = tb[dtype]().row_major[TPB + CONV_2 - 1]().shared().alloc()
+    shared_b = tb[dtype]().row_major[CONV_2]().shared().alloc()
 
     if global_i < SIZE_2:
         shared_a[local_i] = a[global_i]
+
+    if local_i < CONV_2 - 1:
+        nxt = global_i + TPB
+        if nxt < SIZE_2:
+            shared_a[local_i + TPB] = a[nxt]
+        else:
+            shared_a[local_i + TPB] = 0.0
+    
+    if local_i < CONV_2:
+        shared_b[local_i] = b[local_i]
 
     barrier()
 
     if global_i < SIZE_2:
         var curr_sum: output.element_type = 0
 
-        # Load the convolution coefficients into shared memory
-        for j in range(CONV_2):
-            if local_i + j < SIZE_2:
-                shared_b[j] = b[j]
-
-        barrier()
-
-        # Perform the convolution operation
+        @parameter
         for j in range(CONV_2):
             if local_i + j < SIZE_2:
                 curr_sum += shared_a[local_i + j] * shared_b[j]
