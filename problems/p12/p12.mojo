@@ -24,10 +24,29 @@ fn prefix_sum_simple[
 ):
     global_i = block_dim.x * block_idx.x + thread_idx.x
     local_i = thread_idx.x
-    # FILL ME IN (roughly 18 lines)
+    shared = tb[dtype]().row_major[TPB]().shared().alloc()
 
+    if global_i < size:
+        shared[local_i] = a[global_i]
+    
+    barrier()
 
-# ANCHOR_END: prefix_sum_simple
+    offset = 1
+    for i in range(Int(log2(Scalar[dtype](TPB)))):
+        var curr_sum: output.element_type = 0
+        if local_i >= offset and local_i < size:
+            curr_sum = shared[local_i - offset]
+        
+        barrier()
+        if local_i < size:
+            shared[local_i] += curr_sum
+
+        barrier()
+        offset *= 2
+
+    if global_i < size:
+        output[global_i] = shared[local_i]
+
 
 # ANCHOR: prefix_sum_complete
 alias SIZE_2 = 15
